@@ -16,7 +16,7 @@ const app = express();
 app.use(express.json());
 const config = {
     apiversion: "1",
-    author: "daymondlof",       // TODO: Your Battlesnake Username
+    author: "💔💔",  // TODO: Your Battlesnake Username
     color: "#EEA9B8", // TODO: Choose color
     head: "trans-rights-scarf",  // TODO: Choose head, see https://play.battlesnake.com/customizations/ for options unlocked in your account
     tail: "mlh-gene"  // TODO: Choose tail, see https://play.battlesnake.com/customizations/ for options unlocked in your account
