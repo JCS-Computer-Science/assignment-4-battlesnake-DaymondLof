@@ -1,3 +1,4 @@
+let turn = 0;
 // Welcome to
 // __________         __    __  .__                               __
 // \______   \_____ _/  |__/  |_|  |   ____   ______ ____ _____  |  | __ ____
@@ -30,6 +31,8 @@ app.get("/", (req, res)=>{
 //      the request body will contain objects representing the game instance, game board state, and your snake
 //      https://docs.battlesnake.com/api/requests/start
 app.post("/start", (req, res)=>{
+  console.log("---------START----------")
+  turn = 0;
   res.status(200);
 })
 
@@ -37,13 +40,15 @@ app.post("/start", (req, res)=>{
 //      a "shout" property. The request body again contains objects representing the game state
 //      https://docs.battlesnake.com/api/requests/move
 app.post("/move", (req, res)=>{
-  res.status(200).send(move(req.body));
+  turn += 1;
+  res.status(200).send(move(req.body, turn));
 })
 
 //TODO: respond to POST requests on "/end", which signals the end of a game. Your response itself is ignored, 
 //      but must have status code "200" the request body will contain objects representing the game
 //      https://docs.battlesnake.com/api/requests/end
 app.post("/end", (req, res)=>{
+  console.log("---------END----------")
   res.status(200);
 })
 

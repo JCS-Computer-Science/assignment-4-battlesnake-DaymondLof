@@ -1,10 +1,13 @@
-export default function move(gameState){
+export default function move(gameState, turn){
     const rand = max=>Math.floor(Math.random()*max); //RNG
     const board = gameState["board"];
     const headPos = gameState["you"]["head"];
     const neckPos = gameState["you"]["body"][1];
+    const me = gameState["you"]
     const food = board["food"];
     let moveOnTurn = "down"; //DEFAULT MOVE (mostly if no safe moves)
+    let foodMoves = []; //move direction towards food (handled later)
+    let tailMoves = []; //handle later
     /*
         ******************
         ***SAFETY LOGIC***
@@ -53,45 +56,75 @@ export default function move(gameState){
         ***GO TO CLOSEST FOOD***
         ************************
     */
-    const closestFood = ()=> { // function for closest food
-        let currentClosest = food[0];
-        for (let i=1;i<food.length;i++) {
-            let currentDis = Math.abs(currentClosest.x-headPos.x)+Math.abs(currentClosest.y-headPos.y);
-            let newDis = Math.abs(food[i].x-headPos.x)+Math.abs(food[i].y-headPos.y);
-            if (newDis<currentDis) {
-                currentClosest = food[i];
+   console.log(turn)
+   if (me.health<60 || me["length"]<4) {
+       const closestFood = ()=> { // function for closest food
+           let currentClosest = food[0];
+           for (let i=1;i<food.length;i++) {
+               let currentDis = Math.abs(currentClosest.x-headPos.x)+Math.abs(currentClosest.y-headPos.y);
+               let newDis = Math.abs(food[i].x-headPos.x)+Math.abs(food[i].y-headPos.y);
+               if (newDis<currentDis) {
+                   currentClosest = food[i];
+               }
+           }
+           return currentClosest;
+       }
+   
+       let chosenFood = closestFood();
+       //FOOD DIRECTIONS
+       if (chosenFood.x>headPos.x) { //right
+           foodMoves.push("right");
+       } else if (chosenFood.x<headPos.x) { //left
+           foodMoves.push("left");
+       }
+       if (chosenFood.y>headPos.y) { //up
+           foodMoves.push("up");
+       } else if (chosenFood.y<headPos.y) { //down
+           foodMoves.push("down");
+        }
+        for (let i=0;i<foodMoves.length;i++) {
+            if (!safeMoves.includes(foodMoves[i])) { //if food direction isnt safe
+                foodMoves.splice(i, 1);
             }
         }
-        return currentClosest;
-    }
+   } else {
+        /*  ****************
+            ***CHASE TAIL***
+            ****************
+        */
 
-    let chosenFood = closestFood();
-    let foodMoves = [];
-    //FOOD DIRECTIONS
-    if (chosenFood.x>headPos.x) { //right
-        foodMoves.push("right");
-    } else if (chosenFood.x<headPos.x) { //left
-        foodMoves.push("left");
-    }
-    if (chosenFood.y>headPos.y) { //up
-        foodMoves.push("up");
-    } else if (chosenFood.y<headPos.y) { //down
-        foodMoves.push("down");
-    }
+        const tail = me.body[me.body.length-1];
+        //go to tail
+        if (tail.x>headPos.x) { //right
+            tailMoves.push("right");
+        } else if (tail.x<headPos.x) { //left
+            tailMoves.push("left");
+        }
+        if (tail.y>headPos.y) { //up
+            tailMoves.push("up");
+        } else if (tail.y<headPos.y) { //down
+            tailMoves.push("down");
+        }
+        for (let i=0;i<tailMoves.length;i++) {
+            if (!safeMoves.includes(tailMoves[i])) { //if food direction isnt safe
+                tailMoves.splice(i, 1);
+            }
+        }
+   }
     /*
         **********************
         ***FINAL MOVE LOGIC***
         **********************
     */
-    for (let i=0;i<foodMoves.length;i++) {
-        if (!safeMoves.includes(foodMoves[i])) { //if food direction isnt safe
-            foodMoves.splice(i, 1);
-        }
-    }
     if (foodMoves.length>0) { // random dir towards food (if there is a safe one)
         moveOnTurn = foodMoves[rand(foodMoves.length)];
+        console.log(`{${foodMoves}}, ${moveOnTurn}, Food Method`);
+    } else if (tailMoves.length>0) {
+        moveOnTurn = tailMoves[rand(tailMoves.length)]
+        console.log(`{${tailMoves}}, ${moveOnTurn}, Tail Method`);
     } else if (safeMoves.length>0){ // else go other random dir
         moveOnTurn = safeMoves[rand(safeMoves.length)];
+        console.log(`{${safeMoves}}, ${moveOnTurn}, Random Method`);
     }
     // return for response
     return {
