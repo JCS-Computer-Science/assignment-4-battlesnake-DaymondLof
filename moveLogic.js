@@ -10,50 +10,43 @@ export default function move(gameState){
         ***SAFETY LOGIC***
         ******************
     */
-    let safeMoves = {
-        up: "safe",
-        right: "safe",
-        down: "safe",
-        left: "safe"
+    let safeMoves = ["up","right","down","left"];
+
+    //CHECK FOR BOARD BOUNDARIES
+    if (headPos.y==board.height-1) { //up
+        safeMoves.splice(safeMoves.indexOf("up"), 1);
     }
-    if (headPos.x==0) { // board boundaries
-        safeMoves["left"] = "hazard";
-    } else if (headPos.x==board.width-1) {
-        safeMoves["right"] = "hazard";
-    } 
-    if (headPos.y==0) {
-        safeMoves["down"] = "hazard";
-    } else if (headPos.y==board.height-1) {
-        safeMoves["up"] = "hazard";
+    if (headPos.x==board.width-1) { //right
+        safeMoves.splice(safeMoves.indexOf("right"), 1);
     }
-    const checkForSafe = (pos) => {
-        // Loop through all snakes on the board
-        for (const snake of board.snakes) {
-            // Loop through each segment in the snake's body
-            for (const segment of snake.body) {
-                // Compare position values
-                if (segment.x === pos.x && segment.y === pos.y) {
-                    return true; // Found a match
-                }
+    if (headPos.y==0) { //down
+        safeMoves.splice(safeMoves.indexOf("down"), 1);
+    }
+    if (headPos.x==0) { //down
+        safeMoves.splice(safeMoves.indexOf("left"), 1);
+    }
+
+    const checkForHazard = (pos)=>{
+        for (let i=0;i<board.snakes.length;i++) {
+            const snake = board.snakes[i].body
+            if (snake.some(obj => obj.x === pos.x && obj.y === pos.y)) {
+                return true;
             }
         }
-        return false; // No matches found, safe spot
-    };
-    const directions = {
-        up:    { x: 0, y: -1 },
-        down:  { x: 0, y: 1 },
-        left:  { x: -1, y: 0 },
-        right: { x: 1, y: 0 }
-    };
-    for (const [dirName, dirOffset] of Object.entries(directions)) {
-        const newPos = {
-            x: headPos.x + dirOffset.x,
-            y: headPos.y + dirOffset.y
-        };
-    
-        if (checkForSafe(newPos)) {
-            safeMoves[dirName] = "hazard"; // Mark as unsafe 😵‍💫
-        }
+        return false;
+    }
+    //CHECK FOR SNAKE BODY
+    if (checkForHazard({x:headPos.x, y:headPos.y+1})) { // up
+        safeMoves.splice(safeMoves.indexOf("up"), 1);
+    }
+    if (checkForHazard({x:headPos.x+1, y:headPos.y})) { // right
+        safeMoves.splice(safeMoves.indexOf("right"), 1);
+    }
+    if (checkForHazard({x:headPos.x, y:headPos.y-1})) { // down
+        safeMoves.splice(safeMoves.indexOf("down"), 1);
+    }
+    if (checkForHazard({x:headPos.x-1, y:headPos.y})) { // left
+        safeMoves.splice(safeMoves.indexOf("left"), 1);
     }
     /*
         ************************
@@ -71,33 +64,35 @@ export default function move(gameState){
         }
         return currentClosest;
     }
-    const foodPriority = ()=> { //set move priorities for food
-        let priority = [];
-        if (headPos.x<closestFood().x) { //possible x moves
-            priority.push("right");
-        } else if (headPos.x>closestFood().x) {
-            priority.push("left");
-        }
-        if (headPos.y<closestFood.y) { //possible y moves
-            priority.push("up");
-        } else if (headPos.y>closestFood().y) {
-            priority.push("down");
-        }
-        return priority;
-    }
-    let possibleMoves = foodPriority();
-    for (let i of possibleMoves) {
-        if (safeMoves[possibleMoves]=="hazard") {
-            possibleMoves.splice(i, 1);
-        }
-    }
-    if (possibleMoves.length>0) { // if food move
-        moveOnTurn = possibleMoves[rand(possibleMoves.length)];
-    } else { // else go random other way
-        let keyList = Object.keys(safeMoves);
-        moveOnTurn = keyList[rand(keyList.length)]
-    }
 
+    let chosenFood = closestFood();
+    let foodMoves = [];
+    //FOOD DIRECTIONS
+    if (chosenFood.x>headPos.x) { //right
+        foodMoves.push("right");
+    } else if (chosenFood.x<headPos.x) { //left
+        foodMoves.push("left");
+    }
+    if (chosenFood.y>headPos.y) { //up
+        foodMoves.push("up");
+    } else if (chosenFood.y<headPos.y) { //down
+        foodMoves.push("down");
+    }
+    /*
+        **********************
+        ***FINAL MOVE LOGIC***
+        **********************
+    */
+    for (let i=0;i<foodMoves.length;i++) {
+        if (!safeMoves.includes(foodMoves[i])) { //if food direction isnt safe
+            foodMoves.splice(i, 1);
+        }
+    }
+    if (foodMoves.length>0) { // random dir towards food (if there is a safe one)
+        moveOnTurn = foodMoves[rand(foodMoves.length)];
+    } else if (safeMoves.length>0){ // else go other random dir
+        moveOnTurn = safeMoves[rand(safeMoves.length)];
+    }
     // return for response
     return {
         move:moveOnTurn,
