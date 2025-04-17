@@ -1,10 +1,11 @@
-export default function move(gameState, turn){
+export default function move(gameState){
     const rand = max=>Math.floor(Math.random()*max); //RNG
     const board = gameState["board"];
     const headPos = gameState["you"]["head"];
     const neckPos = gameState["you"]["body"][1];
     const me = gameState["you"]
     const food = board["food"];
+    const tail = me.body[me.body.length-1];
     let moveOnTurn = "down"; //DEFAULT MOVE (mostly if no safe moves)
     let foodMoves = []; //move direction towards food (handled later)
     let tailMoves = []; //handle later
@@ -15,6 +16,19 @@ export default function move(gameState, turn){
     */
     let safeMoves = ["up","right","down","left"];
 
+    for (let i=0;i<board.snakes.length; i++) {
+        if (board.snakes[i].id=="gs_wfmcrMGJ7XTKJSV4Bw6MjVGf") {
+            board.snakes[i].body.pop();
+        }
+    }
+    const isNotLongestSnake = ()=> {
+        for (let i=0; i<board.snakes.length; i++) {
+            if (me["length"]>board.snakes[i]["length"]) {
+                return false;
+            }
+        }
+        return true;
+    }
     //CHECK FOR BOARD BOUNDARIES
     if (headPos.y==board.height-1) { //up
         safeMoves.splice(safeMoves.indexOf("up"), 1);
@@ -56,8 +70,7 @@ export default function move(gameState, turn){
         ***GO TO CLOSEST FOOD***
         ************************
     */
-   console.log(turn)
-   if (me.health<60 || me["length"]<4) {
+   if (me.health<50 || isNotLongestSnake()) {
        const closestFood = ()=> { // function for closest food
            let currentClosest = food[0];
            for (let i=1;i<food.length;i++) {
@@ -88,12 +101,11 @@ export default function move(gameState, turn){
             }
         }
    } else {
-        /*  ****************
+        /*  
+            ****************
             ***CHASE TAIL***
             ****************
         */
-
-        const tail = me.body[me.body.length-1];
         //go to tail
         if (tail.x>headPos.x) { //right
             tailMoves.push("right");
