@@ -1,10 +1,10 @@
 export default function move(gameState){
     const rand = max=>Math.floor(Math.random()*max); //RNG
-    const board = gameState["board"];
+    let board = gameState["board"];
     const headPos = gameState["you"]["head"];
     const neckPos = gameState["you"]["body"][1];
     const me = gameState["you"]
-    const food = board["food"];
+    let food = board["food"];
     const tail = me.body[me.body.length-1];
     let moveOnTurn = "down"; //DEFAULT MOVE (mostly if no safe moves)
     let foodMoves = []; //move direction towards food (handled later)
@@ -17,7 +17,7 @@ export default function move(gameState){
     let safeMoves = ["up","right","down","left"];
 
     for (let i=0;i<board.snakes.length; i++) {
-        if (board.snakes[i].id=="gs_wfmcrMGJ7XTKJSV4Bw6MjVGf") {
+        if (board.snakes[i].name=="daymondlof") {
             board.snakes[i].body.pop();
         }
     }
@@ -70,8 +70,12 @@ export default function move(gameState){
         ***GO TO CLOSEST FOOD***
         ************************
     */
-   if (me.health<50 || isNotLongestSnake()) {
-       const closestFood = ()=> { // function for closest food
+    const midWidth = (board.width-1)/2
+    const midHeight = (board.height-1)/2
+    food = food.filter(pos => !(pos.x === midWidth && pos.y === midHeight)); //delete food in middle (or else you die in head to head)
+
+    if ((me.health<20 || isNotLongestSnake()) && food.length>0) {
+        const closestFood = ()=> { // function for closest food
            let currentClosest = food[0];
            for (let i=1;i<food.length;i++) {
                let currentDis = Math.abs(currentClosest.x-headPos.x)+Math.abs(currentClosest.y-headPos.y);
@@ -82,7 +86,6 @@ export default function move(gameState){
            }
            return currentClosest;
        }
-   
        let chosenFood = closestFood();
        //FOOD DIRECTIONS
        if (chosenFood.x>headPos.x) { //right
@@ -118,7 +121,7 @@ export default function move(gameState){
             tailMoves.push("down");
         }
         for (let i=0;i<tailMoves.length;i++) {
-            if (!safeMoves.includes(tailMoves[i])) { //if food direction isnt safe
+            if (!safeMoves.includes(tailMoves[i])) { //if tail direction isnt safe
                 tailMoves.splice(i, 1);
             }
         }
