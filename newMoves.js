@@ -15,26 +15,30 @@ export default function move(gameState){
         }
         return board;
     }
-    const isLongestSnake = ()=>{
-        let current = board.snakes[0].length;
+    const longestSnake = ()=>{
+        let current = {head:board.snakes[0].head, length:board.snakes[0].length};
         for (let i=0;i<board.snakes.length;i++) {
             const snake = board.snakes[i];
-            if (you.id!=snake.id && current<snake.length) {
-                current = snake.length;
+            if (you.id!=snake.id && current.length<snake.length) {
+                current = {head:snake.head, length:snake.length};
             }
         }
-        if (you.length>current) {
-            return true;
-        }
-        return false;
+        return current;
     }
     const board = removeTail(gameState.board);
     const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2));
-    let headToHeadFilter = checkHeadToHead(["up","down","left","right"], you.head, board, you);
-    let moveOnTurn = [];
 
-    if (food.length>0 && (!isLongestSnake() || you.health<30)) {
+    let headToHeadFilter = checkHeadToHead(["up","down","left","right"], you.head, board, you);
+    if (headToHeadFilter.length==2) {
+        headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
+    }
+
+    let moveOnTurn = [];
+    if (food.length>0 && (longestSnake().length>you.length || you.health<30)) {
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter);
+    }
+    if (moveOnTurn.length==0) {
+        moveOnTurn = chaseLongestSnakeMethod(you.head, board, headToHeadFilter, longestSnake().head);
     }
     if (moveOnTurn.length==0) {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
@@ -43,6 +47,7 @@ export default function move(gameState){
         moveOnTurn = randomMethod(you.head, board, headToHeadFilter)
     }
     // send to server
+    // let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
     return {move: moveOnTurn[rand(moveOnTurn.length)]};
 }
 /*
@@ -79,6 +84,10 @@ function randomMethod(head, board, headToHeadFilter) {
 function tailMethod(head, board, headToHeadFilter, you) {
     const tail = you.body[you.length-1];
     return getDirection(tail, head, board, headToHeadFilter);
+}
+function chaseLongestSnakeMethod(head, board, headToHeadFilter, longestSnakeHead) {
+    const target = longestSnakeHead;
+    return getDirection(target, head, board, headToHeadFilter);
 }
 /*
     ***************************
@@ -124,108 +133,50 @@ function checkHeadToHead(moveOnTurn, head, board, you) {
     };
 
     const snakeHeads = () => {
-        return board.snakes
-            .filter(snake => snake.id !== you.id)
-            .map(snake => snake.head);
+        let arr = [];
+        for (const snake of board.snakes) {
+            if (snake.id !== you.id) {
+                arr.push({pos:snake.head, length:snake.length});
+            }
+        }
+        return arr;
     };
-
-    const getEnemySnakeAt = (x, y) => {
-        return board.snakes.find(snake => snake.head.x === x && snake.head.y === y);
-    };
-
-    const isFoodTile = (pos) => {
-        return board.food.some(food => food.x === pos.x && food.y === pos.y);
-    };
-
-    const isSnakeHeadAdjacent = (pos) => {
-        const adjacent = [
-            { x: pos.x, y: pos.y + 1 },
-            { x: pos.x, y: pos.y - 1 },
-            { x: pos.x + 1, y: pos.y },
-            { x: pos.x - 1, y: pos.y },
-        ];
-        return adjacent.some(adj =>
-            snakeHeads().some(snake => snake.x === adj.x && snake.y === adj.y)
-        );
-    };
-
-    const foodMoves = [];
 
     for (let i = 0; i < moveOnTurn.length; i++) {
-        const move = moveOnTurn[i];
-        const pos = nextMove(move, head);
+        const pos = nextMove(moveOnTurn[i], head);
+        const { x, y } = pos;
 
-        const isDanger = isSnakeHeadAdjacent(pos);
-        const isFood = isFoodTile(pos);
-        const trulySafe = getSafe(pos, board);
+        const adjacent = [
+            { x, y: y + 1 },
+            { x, y: y - 1 },
+            { x: x + 1, y },
+            { x: x - 1, y },
+        ];
 
-        if (isFood) {
-            foodMoves.push({ move, pos });
-        }
-
-        if (isDanger) {
-            if (!movesToFilter.danger.includes(move)) {
-                movesToFilter.danger.push(move);
-            }
-        } else if (trulySafe) {
-            if (!movesToFilter.safe.includes(move)) {
-                movesToFilter.safe.push(move);
+        let isDanger = adjacent.some(adj =>
+            snakeHeads().some(snake => 
+                snake.pos.x === adj.x && 
+                snake.pos.y === adj.y && 
+                snake.length >= you.length //only be danger if snake is equal or longer in length
+            )
+        );
+        if (isDanger || !getSafe(pos, board)) {
+            if (!movesToFilter.danger.includes(moveOnTurn[i])) {
+                movesToFilter.danger.push(moveOnTurn[i]);
             }
         } else {
-            if (!movesToFilter.danger.includes(move)) {
-                movesToFilter.danger.push(move);
+            if (!movesToFilter.safe.includes(moveOnTurn[i])) {
+                movesToFilter.safe.push(moveOnTurn[i]);
             }
         }
     }
 
-    // Override: if every food move is a bait trap, move them all to danger
-    if (
-        foodMoves.length > 0 &&
-        foodMoves.every(({ pos }) => isSnakeHeadAdjacent(pos))
-    ) {
-        for (const { move } of foodMoves) {
-            if (!movesToFilter.danger.includes(move)) {
-                movesToFilter.danger.push(move);
-            }
-            const index = movesToFilter.safe.indexOf(move);
-            if (index !== -1) {
-                movesToFilter.safe.splice(index, 1);
-            }
-        }
-    }
-
-    // Final override: head-to-head fallback if no safe options exist
-    if (movesToFilter.safe.length === 0) {
-        for (const move of movesToFilter.danger) {
-            const pos = nextMove(move, head);
-            const adjacent = [
-                { x: pos.x, y: pos.y + 1 },
-                { x: pos.x, y: pos.y - 1 },
-                { x: pos.x + 1, y: pos.y },
-                { x: pos.x - 1, y: pos.y },
-            ];
-
-            const canWinClash = adjacent.some(adj => {
-                const enemy = getEnemySnakeAt(adj.x, adj.y);
-                return enemy && enemy.length < you.length;
-            });
-
-            if (canWinClash) {
-                movesToFilter.safe.push(move);
-            }
-        }
-
-        // Clean up danger list
-        movesToFilter.danger = movesToFilter.danger.filter(move => !movesToFilter.safe.includes(move));
-    }
-
-    // Final decision
     if (movesToFilter.safe.length > 0) {
         moveOnTurn = movesToFilter.safe;
     }
 
-    console.log("Safe/Danger:", movesToFilter);
-    console.log("Final Move:", moveOnTurn);
+    // console.log(movesToFilter);
+    // console.log(moveOnTurn);
     return moveOnTurn;
 }
 function nextMove(moveOnTurn, head) {
@@ -239,4 +190,20 @@ function nextMove(moveOnTurn, head) {
     } else if (moveOnTurn=="left") {
         return {x:x-1, y:y};
     }
+}
+function handleFill(filter, head, board) {
+    let fills = [];
+    for (let i=0;i<filter.length;i++) {
+        let pos = nextMove(filter[i], head);
+        fills.push(floodFill(pos, board));
+        let boardVisit = [];
+        function floodFill(pos, board) {
+            if (boardVisit.some(obj=>obj.x==pos.x && obj.y==pos.y) || !getSafe(pos, board)) {
+                return 0;
+            } else {
+                
+            }
+        }
+    }
+    return filter;
 }
