@@ -15,40 +15,59 @@ export default function move(gameState){
         }
         return board;
     }
-    const longestSnake = ()=>{
-        let current = {head:board.snakes[0].head, length:board.snakes[0].length};
-        for (let i=0;i<board.snakes.length;i++) {
+    const longestEnemySnake = () => {
+        let longest = null;
+    
+        for (let i = 0; i < board.snakes.length; i++) {
             const snake = board.snakes[i];
-            if (you.id!=snake.id && current.length<snake.length) {
-                current = {head:snake.head, length:snake.length};
+            if (snake.id !== you.id) {
+                if (!longest || snake.length > longest.length) {
+                    longest = snake;
+                }
             }
         }
-        return current;
-    }
+    
+        return longest;
+    };
     const board = removeTail(gameState.board);
     const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2));
 
     let headToHeadFilter = checkHeadToHead(["up","down","left","right"], you.head, board, you);
-    if (headToHeadFilter.length==2) {
-        headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
-    }
+    //flood fill
+    headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
+    
 
     let moveOnTurn = [];
-    if (food.length>0 && (longestSnake().length>you.length || you.health<30)) {
+    let method;
+
+    const enemyLongest = longestEnemySnake();
+    const isLongest = !enemyLongest || you.length > enemyLongest.length;
+
+    if (food.length > 0 && (!isLongest || you.health < 30 || you.length < 11)) {
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter);
+        method = "Food";
     }
     if (moveOnTurn.length==0) {
-        moveOnTurn = chaseLongestSnakeMethod(you.head, board, headToHeadFilter, longestSnake().head);
+        moveOnTurn = chaseLongestSnakeMethod(you.head, board, headToHeadFilter, enemyLongest.head);
+        method = "Hunt";
     }
     if (moveOnTurn.length==0) {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
+        method = "Tail";
     }
     if (moveOnTurn.length==0) {
-        moveOnTurn = randomMethod(you.head, board, headToHeadFilter)
+        moveOnTurn = randomMethod(you.head, board, headToHeadFilter);
+        method = "Rand";
     }
     // send to server
-    // let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
-    return {move: moveOnTurn[rand(moveOnTurn.length)]};
+    let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
+    console.log(
+        '\x1b[34m%s\x1b[0m \x1b[32m%s\x1b[0m \x1b[33m%s\x1b[0m',
+        `${method}`,
+        `[${moveOnTurn}]`, 
+        `${chosenMove}`
+    );
+    return {move: chosenMove};
 }
 /*
     *******************
@@ -194,16 +213,44 @@ function nextMove(moveOnTurn, head) {
 function handleFill(filter, head, board) {
     let fills = [];
     for (let i=0;i<filter.length;i++) {
+        let boardVisit = [];
         let pos = nextMove(filter[i], head);
         fills.push(floodFill(pos, board));
-        let boardVisit = [];
         function floodFill(pos, board) {
-            if (boardVisit.some(obj=>obj.x==pos.x && obj.y==pos.y) || !getSafe(pos, board)) {
+            if (boardVisit.some(obj => obj.x === pos.x && obj.y === pos.y) || !getSafe(pos, board)) {
                 return 0;
             } else {
-                
+                boardVisit.push({ x: pos.x, y: pos.y });
+                let count = 1;
+                const directions = [
+                    { x: 0, y: -1 },
+                    { x: 0, y: 1 },
+                    { x: -1, y: 0 },
+                    { x: 1, y: 0 }
+                ];
+
+                for (let dir of directions) {
+                    const newPos = { x: pos.x + dir.x, y: pos.y + dir.y };
+                    count += floodFill(newPos, board, boardVisit);
+                }
+    
+                return count;
             }
         }
     }
-    return filter;
+    let newMoves = [];
+    let bigger = Math.max(...fills);
+    for (let j=0;j<filter.length;j++) {
+        if (fills[j]==bigger) {
+            newMoves.push(filter[j]);
+        }
+    }
+    // if (arraysEqual(filter, newMoves)==false) {
+    //     console.log(`Changed:${filter}=>${newMoves}`);
+    // }
+    return newMoves;
+}
+function arraysEqual(a, b) {
+    if (a.length !== b.length) return false;
+    return a.every((val, index) => val === b[index]);
 }
