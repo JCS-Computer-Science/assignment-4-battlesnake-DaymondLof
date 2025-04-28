@@ -16,8 +16,11 @@ export default function move(gameState){
         return board;
     }
     const longestEnemySnake = () => {
+        if (!board || !board.snakes || board.snakes.length === 0) {
+            return you;
+        }
+
         let longest = null;
-    
         for (let i = 0; i < board.snakes.length; i++) {
             const snake = board.snakes[i];
             if (snake.id !== you.id) {
@@ -30,26 +33,29 @@ export default function move(gameState){
         return longest;
     };
     const board = removeTail(gameState.board);
-    const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2));
+    const food = board.food;
+    // const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2));
 
-    let headToHeadFilter = checkHeadToHead(["up","down","left","right"], you.head, board, you);
     //flood fill
-    headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
+    let headToHeadFilter = handleFill(["up","down","left","right"], you.head, board);
+    //avoid head to heads
+    headToHeadFilter = checkHeadToHead(headToHeadFilter, you.head, board, you);
     
 
     let moveOnTurn = [];
     let method;
 
     const enemyLongest = longestEnemySnake();
-    const isLongest = !enemyLongest || you.length > enemyLongest.length;
+    const isLongest = !enemyLongest || you.length > enemyLongest.length+3;
 
-    if (food.length > 0 && (!isLongest || you.health < 30 || you.length < 11)) {
-        moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter);
-        method = "Food";
-    }
-    if (moveOnTurn.length==0) {
+    //CHANGE THESE TO PRIOTIZE HUNT IF SNAKE IS LONGEST *****
+    if (isLongest && you.health>30) {
         moveOnTurn = chaseLongestSnakeMethod(you.head, board, headToHeadFilter, enemyLongest.head);
         method = "Hunt";
+    }
+    if (food.length > 0 && (!isLongest || you.health < 30) && moveOnTurn.length==0) {
+        moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter);
+        method = "Food";
     }
     if (moveOnTurn.length==0) {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
@@ -143,6 +149,12 @@ function getSafe(pos, board) {
             }
         }
     }
+    for (let i=0;i<board.hazards.length;i++) {
+        const hazard = board.hazards[i];
+        if (hazard["x"]==x && hazard["y"]==y) {
+            return false;
+        }
+    }
     return true;
 }
 function checkHeadToHead(moveOnTurn, head, board, you) {
@@ -210,12 +222,13 @@ function nextMove(moveOnTurn, head) {
         return {x:x-1, y:y};
     }
 }
-function handleFill(filter, head, board) {
+function handleFill(filter, head, board, snake) {
     let fills = [];
-    for (let i=0;i<filter.length;i++) {
+    for (let i = 0; i < filter.length; i++) {
         let boardVisit = [];
         let pos = nextMove(filter[i], head);
         fills.push(floodFill(pos, board));
+        
         function floodFill(pos, board) {
             if (boardVisit.some(obj => obj.x === pos.x && obj.y === pos.y) || !getSafe(pos, board)) {
                 return 0;
@@ -228,29 +241,47 @@ function handleFill(filter, head, board) {
                     { x: -1, y: 0 },
                     { x: 1, y: 0 }
                 ];
-
                 for (let dir of directions) {
                     const newPos = { x: pos.x + dir.x, y: pos.y + dir.y };
                     count += floodFill(newPos, board, boardVisit);
                 }
-    
                 return count;
             }
         }
     }
+
     let newMoves = [];
-    let bigger = Math.max(...fills);
-    for (let j=0;j<filter.length;j++) {
-        if (fills[j]==bigger) {
+    let biggestFill = Math.max(...fills);
+
+    for (let j = 0; j < filter.length; j++) {
+        if (fills[j] < biggestFill) continue; // Only keep moves with maximum fill
+        
+        let simulatedSnake = simulateMove(filter[j], snake);
+        console.log(simulatedSnake)
+        let bounds = getBounds(simulatedSnake.body.slice(0, -1)); // Exclude tail
+
+        let boundingArea = (bounds.maxX - bounds.minX + 1) * (bounds.maxY - bounds.minY + 1);
+
+        if (boundingArea > fills[j]) {
             newMoves.push(filter[j]);
         }
     }
-    // if (arraysEqual(filter, newMoves)==false) {
-    //     console.log(`Changed:${filter}=>${newMoves}`);
-    // }
-    return newMoves;
+
+    return newMoves.length > 0 ? newMoves : filter; // Fallback if none pass
 }
-function arraysEqual(a, b) {
-    if (a.length !== b.length) return false;
-    return a.every((val, index) => val === b[index]);
+
+// Helper function to simulate moving the snake
+function simulateMove(snake, moveOnTurn) {
+    let newHead = nextMove(moveOnTurn, snake[0]);
+    let newSnake = [newHead, ...snake.slice(0, -1)]; // move head, shift body
+    return newSnake;
+}
+
+// Helper function to get bounding box of snake body
+function getBounds(body) {
+    let minX = Math.min(...body.map(p => p.x));
+    let maxX = Math.max(...body.map(p => p.x));
+    let minY = Math.min(...body.map(p => p.y));
+    let maxY = Math.max(...body.map(p => p.y));
+    return { minX, maxX, minY, maxY };
 }
