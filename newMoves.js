@@ -98,22 +98,25 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
         return food[minIndex];
     };
 
-    if (51 < 50) {
+    if (you.health < 50) {
         let target = closestFood();
         return getDirection(target, head, board, headToHeadFilter);
     }
-    // for (const snake of board.snakes) {
-    //     if (snake.id != you.id) {
-    //         let closest = closestFood(snake.head);
-    //         if (closest) {
-    //             let snakeDistance = getDistance(snake.head, closest);
-    //             let youDistance = getDistance(head, closest);
-    //             if (youDistance > snakeDistance) {
-    //                 food = food.filter(pos => pos.x != closest.x && pos.y != closest.y);
-    //             }
-    //         }
-    //     }
-    // }
+    for (const snake of board.snakes) {
+        if (snake.id !== you.id) {
+            let closest = closestFood(snake.head); // Get the closest food for the opponent
+    
+            if (closest) {
+                let snakeDistance = getDistance(snake.head, closest);
+                let youDistance = getDistance(you.head, closest); 
+    
+                if (youDistance >= snakeDistance) {
+                    // remove food if its closer to an opponent
+                    food = food.filter(pos => pos.x !== closest.x || pos.y !== closest.y);
+                }
+            }
+        }
+    }
     if (food.length === 0) {
         return [];
     }
@@ -167,26 +170,70 @@ function getDirection(pos, head, board, headToHeadFilter) { //get
     }
     return arr;
 }
+// function getSafe(pos, board) {
+//     const {x, y} = pos;
+//     if (x<0 || x>board.width-1 || y<0 || y>board.height-1) {
+//         return false;
+//     }
+//     for (let i=0;i<board.snakes.length;i++) {
+//         const snake = board.snakes[i];
+//         for (let j=0; j<snake.body.length; j++) {
+//             const part = snake.body[j];
+//             if (part["x"]==x && part["y"]==y) {
+//                 return false;
+//             }
+//         }
+//     }
+//     for (let i=0;i<board.hazards.length;i++) {
+//         const hazard = board.hazards[i];
+//         if (hazard["x"]==x && hazard["y"]==y) {
+//             return false;
+//         }
+//     }
+//     return true;
+// }
 function getSafe(pos, board) {
-    const {x, y} = pos;
-    if (x<0 || x>board.width-1 || y<0 || y>board.height-1) {
+    const { x, y } = pos;
+
+    // Check if position is outside the board boundaries
+    if (x < 0 || x > board.width - 1 || y < 0 || y > board.height - 1) {
         return false;
     }
-    for (let i=0;i<board.snakes.length;i++) {
-        const snake = board.snakes[i];
-        for (let j=0; j<snake.body.length; j++) {
-            const part = snake.body[j];
-            if (part["x"]==x && part["y"]==y) {
+
+    // Check if the position is occupied by a snake's body
+    for (const snake of board.snakes) {
+        for (const part of snake.body) {
+            if (part.x === x && part.y === y) {
                 return false;
             }
         }
     }
-    for (let i=0;i<board.hazards.length;i++) {
-        const hazard = board.hazards[i];
-        if (hazard["x"]==x && hazard["y"]==y) {
-            return false;
+
+    // Separate hazards from regular checks to determine move priority
+    let isHazard = board.hazards.some(hazard => hazard.x === x && hazard.y === y);
+
+    // Define possible movement directions
+    const directions = [
+        { x: -1, y: 0 }, // Left
+        { x: 1, y: 0 },  // Right
+        { x: 0, y: -1 }, // Up
+        { x: 0, y: 1 }   // Down
+    ];
+
+    // If hazards exist, determine if avoiding them would leave zero valid moves
+    if (isHazard) {
+        let safeMoves = directions.filter(dir => {
+            let newX = x + dir.x;
+            let newY = y + dir.y;
+            return !board.hazards.some(h => h.x === newX && h.y === newY);
+        });
+
+        if (safeMoves.length === 0) {
+            return true; // Allow hazards if no other moves exist
         }
+        return false; // Otherwise, avoid hazards
     }
+
     return true;
 }
 function checkHeadToHead(moveOnTurn, head, board, you) {
