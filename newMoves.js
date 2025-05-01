@@ -32,7 +32,11 @@ export default function move(gameState){
         }
     
         return longest || you;
-    };      
+    }; 
+    const isInHazard = (target) => {
+        const hazards = gameState.board.hazards;
+        return hazards.some(hazard => hazard.x === target.x && hazard.y === target.y);
+    };   
     const board = removeTail(gameState.board);
     const food = board.food;
     // const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2)); //removes middle food
@@ -47,8 +51,12 @@ export default function move(gameState){
     headToHeadFilter = checkHeadToHead(headToHeadFilter, you.head, board, you);
     //flood fill
     headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
-
-    if (isLongest && you.health>30) {
+    
+    if (isInHazard(you.head)==true) {
+        moveOnTurn = hazardMethod(you.head, board, headToHeadFilter);
+        method = "Huzz";
+    }
+    if (isLongest && you.health>30 && moveOnTurn.length==0) {
         moveOnTurn = chaseMethod(you.head, board, headToHeadFilter, enemyLongest.head);
         method = "Hunt";
     }
@@ -56,9 +64,13 @@ export default function move(gameState){
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter, you);
         method = "Food";
     }
-    if (moveOnTurn.length==0) {
+    if (moveOnTurn.length==0 && !isInHazard(you.body[you.length-1])) {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
         method = "Tail";
+    }
+    if (moveOnTurn.length==0) {
+        moveOnTurn = hazardMethod(you.head, board, headToHeadFilter); //hazard and this do the same thing rn
+        method = "Midd"
     }
     if (moveOnTurn.length==0) {
         moveOnTurn = randomMethod(you.head, board, headToHeadFilter);
@@ -68,10 +80,10 @@ export default function move(gameState){
     let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
     console.log(
         '\x1b[91m%s\x1b[0m \x1b[34m%s\x1b[0m \x1b[32m%s\x1b[0m \x1b[33m%s\x1b[0m',
-        `${turn}:`,  // Light red for turn
-        `${method}`,  // Blue for method
-        `[${moveOnTurn}]`,  // Green for moveOnTurn
-        `${chosenMove}`  // Yellow for chosenMove
+        `${turn}:`,  // Red
+        `${method}`,  // Blue
+        `[${moveOnTurn}]`,  // Green
+        `${chosenMove}`  // Yellow
     );
     
     return {move: chosenMove};
@@ -97,11 +109,12 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
     
         return food[minIndex];
     };
-
-    if (you.health < 50) {
+    if (you.health < 50 && closestFood()) {
         let target = closestFood();
         return getDirection(target, head, board, headToHeadFilter);
     }
+    const hazards = board.hazards;
+    food = food.filter(food => !hazards.some(hazard => hazard.x === food.x && hazard.y === food.y));
     for (const snake of board.snakes) {
         if (snake.id !== you.id) {
             let closest = closestFood(snake.head); // Get the closest food for the opponent
@@ -149,6 +162,10 @@ function chaseMethod(head, board, headToHeadFilter, longestSnakeHead) {
     const target = longestSnakeHead;
     return getDirection(target, head, board, headToHeadFilter);
 }
+function hazardMethod(head, board, headToHeadFilter) {
+    const target = {x:(board.width+1)/2, y:(board.height+1)/2}
+    return getDirection(target, head, board, headToHeadFilter);
+}
 /*
     ***************************
     ***** OTHER FUNCTIONS *****
@@ -170,70 +187,20 @@ function getDirection(pos, head, board, headToHeadFilter) { //get
     }
     return arr;
 }
-// function getSafe(pos, board) {
-//     const {x, y} = pos;
-//     if (x<0 || x>board.width-1 || y<0 || y>board.height-1) {
-//         return false;
-//     }
-//     for (let i=0;i<board.snakes.length;i++) {
-//         const snake = board.snakes[i];
-//         for (let j=0; j<snake.body.length; j++) {
-//             const part = snake.body[j];
-//             if (part["x"]==x && part["y"]==y) {
-//                 return false;
-//             }
-//         }
-//     }
-//     for (let i=0;i<board.hazards.length;i++) {
-//         const hazard = board.hazards[i];
-//         if (hazard["x"]==x && hazard["y"]==y) {
-//             return false;
-//         }
-//     }
-//     return true;
-// }
 function getSafe(pos, board) {
-    const { x, y } = pos;
-
-    // Check if position is outside the board boundaries
-    if (x < 0 || x > board.width - 1 || y < 0 || y > board.height - 1) {
+    const {x, y} = pos;
+    if (x<0 || x>board.width-1 || y<0 || y>board.height-1) {
         return false;
     }
-
-    // Check if the position is occupied by a snake's body
-    for (const snake of board.snakes) {
-        for (const part of snake.body) {
-            if (part.x === x && part.y === y) {
+    for (let i=0;i<board.snakes.length;i++) {
+        const snake = board.snakes[i];
+        for (let j=0; j<snake.body.length; j++) {
+            const part = snake.body[j];
+            if (part["x"]==x && part["y"]==y) {
                 return false;
             }
         }
     }
-
-    // Separate hazards from regular checks to determine move priority
-    let isHazard = board.hazards.some(hazard => hazard.x === x && hazard.y === y);
-
-    // Define possible movement directions
-    const directions = [
-        { x: -1, y: 0 }, // Left
-        { x: 1, y: 0 },  // Right
-        { x: 0, y: -1 }, // Up
-        { x: 0, y: 1 }   // Down
-    ];
-
-    // If hazards exist, determine if avoiding them would leave zero valid moves
-    if (isHazard) {
-        let safeMoves = directions.filter(dir => {
-            let newX = x + dir.x;
-            let newY = y + dir.y;
-            return !board.hazards.some(h => h.x === newX && h.y === newY);
-        });
-
-        if (safeMoves.length === 0) {
-            return true; // Allow hazards if no other moves exist
-        }
-        return false; // Otherwise, avoid hazards
-    }
-
     return true;
 }
 function checkHeadToHead(moveOnTurn, head, board, you) {
