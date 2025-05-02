@@ -44,7 +44,7 @@ export default function move(gameState){
     let method;
 
     const enemyLongest = longestEnemySnake();
-    const isLongest = !enemyLongest || you.length > enemyLongest.length+3;
+    const isLongest = !enemyLongest || you.length > enemyLongest.length+2;
 
     let headToHeadFilter = ["up","down","left","right"];
     //avoid head to heads
@@ -69,12 +69,16 @@ export default function move(gameState){
         method = "Tail";
     }
     if (moveOnTurn.length==0) {
-        moveOnTurn = hazardMethod(you.head, board, headToHeadFilter); //hazard and this do the same thing rn
+        moveOnTurn = midMethod(you.head, board, headToHeadFilter); //hazard and this do the same thing rn
         method = "Midd"
     }
     if (moveOnTurn.length==0) {
-        moveOnTurn = randomMethod(you.head, board, headToHeadFilter);
+        moveOnTurn = randomMethod(you.head, board, headToHeadFilter, you, false);
         method = "Rand";
+    }
+    if (moveOnTurn.length==0) {
+        moveOnTurn = randomMethod(you.head, board, headToHeadFilter, you, true);
+        method = "Ran2";
     }
     // send to server
     let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
@@ -109,7 +113,7 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
     
         return food[minIndex];
     };
-    if (you.health < 50 && closestFood()) {
+    if (you.health < 50 && closestFood() && getDistance(you, closestFood())<=5) {
         let target = closestFood();
         return getDirection(target, head, board, headToHeadFilter);
     }
@@ -138,18 +142,18 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
     return getDirection(target, head, board, headToHeadFilter);
 }
 
-function randomMethod(head, board, headToHeadFilter) {
+function randomMethod(head, board, headToHeadFilter, you, hazardSafe) {
     let randMoves = [];
-    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left")) {
+    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left") && (isSafeDirection("left", you, board)&&hazardSafe)) {
         randMoves.push("left")
     }
-    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right")) {
+    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right") && (isSafeDirection("right", you, board)&&hazardSafe)) {
         randMoves.push("right");
     }
-    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down")) {
+    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down") && (isSafeDirection("down", you, board)&&hazardSafe)) {
         randMoves.push("down");
     }
-    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up")) {
+    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up") && (isSafeDirection("up", you, board)&&hazardSafe)) {
         randMoves.push("up");
     }
     return randMoves;
@@ -163,6 +167,46 @@ function chaseMethod(head, board, headToHeadFilter, longestSnakeHead) {
     return getDirection(target, head, board, headToHeadFilter);
 }
 function hazardMethod(head, board, headToHeadFilter) {
+    const directions = ["up", "down", "left", "right"];
+    const deltas = {
+      up:    { x: 0, y: -1 },
+      down:  { x: 0, y: 1 },
+      left:  { x: -1, y: 0 },
+      right: { x: 1, y: 0 }
+    };
+  
+    // Check if a square is a hazard
+    function isHazard(pos) {
+      return board.hazards.some(h => h.x === pos.x && h.y === pos.y);
+    }
+  
+    // Try to move into a non-hazard square
+    for (const dir of directions) {
+      const next = {
+        x: head.x + deltas[dir].x,
+        y: head.y + deltas[dir].y
+      };
+  
+      if (!isHazard(next)) {
+        return dir;
+      }
+    }
+  
+    // If no safe adjacent squares, use getSafe() to confirm
+    const safeMoves = getSafe(head, board);
+    if (safeMoves.length === 0) {
+      // Fallback: move toward center
+      const target = {
+        x: Math.floor((board.width + 1) / 2),
+        y: Math.floor((board.height + 1) / 2)
+      };
+      return getDirection(target, head, board, headToHeadFilter);
+    }
+  
+    // Still choose a safe direction if any were returned
+    return safeMoves[0]; // Or pick randomly if needed
+}
+function midMethod(head, board, headToHeadFilter) {
     const target = {x:(board.width+1)/2, y:(board.height+1)/2}
     return getDirection(target, head, board, headToHeadFilter);
 }
@@ -308,3 +352,34 @@ function handleFill(filter, head, board) {
 function getDistance(snake, target) {
     return Math.abs(snake.x-target.x)+Math.abs(snake.y-target.y);
 }
+function isSafeDirection(direction, snake, board) {
+    const head = snake.head;
+    let next = { x: head.x, y: head.y };
+  
+    // Calculate the next coordinate based on the direction
+    switch (direction) {
+      case "up":
+        next.y -= 1;
+        break;
+      case "down":
+        next.y += 1;
+        break;
+      case "left":
+        next.x -= 1;
+        break;
+      case "right":
+        next.x += 1;
+        break;
+      default:
+        return false; // Invalid direction
+    }
+  
+    // Check if the next position is in a hazard
+    for (const hazard of board.hazards) {
+      if (hazard.x === next.x && hazard.y === next.y) {
+        return false;
+      }
+    }
+  
+    return true;
+  }
