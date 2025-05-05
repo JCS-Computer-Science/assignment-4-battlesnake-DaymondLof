@@ -53,7 +53,7 @@ export default function move(gameState){
     headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
     
     if (isInHazard(you.head)==true) {
-        moveOnTurn = hazardMethod(you.head, board, headToHeadFilter);
+        moveOnTurn = midMethod(you.head, board, headToHeadFilter);
         method = "Huzz";
     }
     if (isLongest && you.health>30 && moveOnTurn.length==0) {
@@ -73,12 +73,8 @@ export default function move(gameState){
         method = "Midd"
     }
     if (moveOnTurn.length==0) {
-        moveOnTurn = randomMethod(you.head, board, headToHeadFilter, you, false);
+        moveOnTurn = randomMethod(you.head, board, headToHeadFilter, you);
         method = "Rand";
-    }
-    if (moveOnTurn.length==0) {
-        moveOnTurn = randomMethod(you.head, board, headToHeadFilter, you, true);
-        method = "Ran2";
     }
     // send to server
     let chosenMove = moveOnTurn[rand(moveOnTurn.length)];
@@ -142,18 +138,25 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
     return getDirection(target, head, board, headToHeadFilter);
 }
 
-function randomMethod(head, board, headToHeadFilter, you, hazardSafe) {
+function randomMethod(head, board, headToHeadFilter, you) {
     let randMoves = [];
-    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left") && (isSafeDirection("left", you, board)&&hazardSafe)) {
+    const isHazard = dir=> {
+        let newPos = nextMove(dir, head);
+        if (board.hazard.some(hazard => hazard.x === newPos.x && hazard.y === newPos.y)) {
+            
+        }
+        
+    }
+    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left")) {
         randMoves.push("left")
     }
-    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right") && (isSafeDirection("right", you, board)&&hazardSafe)) {
+    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right")) {
         randMoves.push("right");
     }
-    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down") && (isSafeDirection("down", you, board)&&hazardSafe)) {
+    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down")) {
         randMoves.push("down");
     }
-    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up") && (isSafeDirection("up", you, board)&&hazardSafe)) {
+    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up")) {
         randMoves.push("up");
     }
     return randMoves;
@@ -167,45 +170,62 @@ function chaseMethod(head, board, headToHeadFilter, longestSnakeHead) {
     return getDirection(target, head, board, headToHeadFilter);
 }
 function hazardMethod(head, board, headToHeadFilter) {
-    const directions = ["up", "down", "left", "right"];
-    const deltas = {
-      up:    { x: 0, y: -1 },
-      down:  { x: 0, y: 1 },
-      left:  { x: -1, y: 0 },
-      right: { x: 1, y: 0 }
-    };
-  
-    // Check if a square is a hazard
-    function isHazard(pos) {
-      return board.hazards.some(h => h.x === pos.x && h.y === pos.y);
+    let moveDistances = [];
+
+    for (let i = 0; i < filter.length; i++) {
+        const direction = filter[i];
+        const startPos = nextMove(direction, head);
+        const distance = shortestDistanceToSafe(startPos, board);
+
+        if (distance !== null) {
+            moveDistances.push({ direction, distance });
+        }
     }
-  
-    // Try to move into a non-hazard square
-    for (const dir of directions) {
-      const next = {
-        x: head.x + deltas[dir].x,
-        y: head.y + deltas[dir].y
-      };
-  
-      if (!isHazard(next)) {
-        return dir;
-      }
+
+    if (moveDistances.length === 0) return [];
+
+    const minDistance = Math.min(...moveDistances.map(m => m.distance));
+    return moveDistances
+        .filter(m => m.distance === minDistance)
+        .map(m => m.direction);
+
+    function shortestDistanceToSafe(start, board) {
+        const visited = new Set();
+        const queue = [{ pos: start, dist: 0 }];
+        const key = (p) => `${p.x},${p.y}`;
+
+        while (queue.length > 0) {
+            const { pos, dist } = queue.shift();
+            const k = key(pos);
+
+            if (visited.has(k)) continue;
+            visited.add(k);
+
+            if (!getHazard(pos, board)) {
+                return dist;
+            }
+
+            const directions = [
+                { x: 0, y: -1 },
+                { x: 0, y: 1 },
+                { x: -1, y: 0 },
+                { x: 1, y: 0 }
+            ];
+
+            for (const dir of directions) {
+                const newPos = { x: pos.x + dir.x, y: pos.y + dir.y };
+                const nk = key(newPos);
+
+                if (!visited.has(nk) && getSafe(newPos, board)) {
+                    queue.push({ pos: newPos, dist: dist + 1 });
+                }
+            }
+        }
+
+        return null; // No safe tile found
     }
-  
-    // If no safe adjacent squares, use getSafe() to confirm
-    const safeMoves = getSafe(head, board);
-    if (safeMoves.length === 0) {
-      // Fallback: move toward center
-      const target = {
-        x: Math.floor((board.width + 1) / 2),
-        y: Math.floor((board.height + 1) / 2)
-      };
-      return getDirection(target, head, board, headToHeadFilter);
-    }
-  
-    // Still choose a safe direction if any were returned
-    return safeMoves[0]; // Or pick randomly if needed
 }
+
 function midMethod(head, board, headToHeadFilter) {
     const target = {x:(board.width+1)/2, y:(board.height+1)/2}
     return getDirection(target, head, board, headToHeadFilter);
