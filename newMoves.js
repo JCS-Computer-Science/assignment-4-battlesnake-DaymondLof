@@ -52,19 +52,19 @@ export default function move(gameState){
     //flood fill
     headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
     
-    if (isInHazard(you.head)==true) {
-        moveOnTurn = midMethod(you.head, board, headToHeadFilter);
-        method = "Huzz";
-    }
-    if (isLongest && you.health>30 && moveOnTurn.length==0) {
-        moveOnTurn = chaseMethod(you.head, board, headToHeadFilter, enemyLongest.head);
-        method = "Hunt";
-    }
     if (food.length > 0 && (!isLongest || you.health < 30) && moveOnTurn.length==0) {
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter, you);
         method = "Food";
     }
-    if (moveOnTurn.length==0 && !isInHazard(you.body[you.length-1])) {
+    if (isInHazard(you.head)==true && moveOnTurn.length==0) {
+        moveOnTurn = midMethod(you.head, board, headToHeadFilter);
+        method = "Huzz";
+    }
+    if (isLongest) {
+        moveOnTurn = chaseMethod(you.head, board, headToHeadFilter, enemyLongest.head);
+        method = "Hunt";
+    }
+    if (moveOnTurn.length==0 && !isInHazard(you.body[you.body.length - 1])) {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
         method = "Tail";
     }
@@ -109,12 +109,6 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
     
         return food[minIndex];
     };
-    if (you.health < 50 && closestFood() && getDistance(you, closestFood())<=5) {
-        let target = closestFood();
-        return getDirection(target, head, board, headToHeadFilter);
-    }
-    const hazards = board.hazards;
-    food = food.filter(food => !hazards.some(hazard => hazard.x === food.x && hazard.y === food.y));
     for (const snake of board.snakes) {
         if (snake.id !== you.id) {
             let closest = closestFood(snake.head); // Get the closest food for the opponent
@@ -130,6 +124,16 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
             }
         }
     }
+    if (closestFood()) {
+        const distanceToFood = getDistance(you.head, closestFood());
+        const canSurviveHazard = distanceToFood <= Math.floor(you.health / 15);
+        if (canSurviveHazard) {
+            let target = closestFood();
+            return getDirection(target, head, board, headToHeadFilter);
+        }
+    }
+    const hazards = board.hazards;
+    food = food.filter(food => !hazards.some(hazard => hazard.x === food.x && hazard.y === food.y));
     if (food.length === 0) {
         return [];
     }
@@ -142,22 +146,36 @@ function randomMethod(head, board, headToHeadFilter, you) {
     let randMoves = [];
     const isHazard = dir=> {
         let newPos = nextMove(dir, head);
-        if (board.hazard.some(hazard => hazard.x === newPos.x && hazard.y === newPos.y)) {
-            
+        if (board.hazards.some(haz => haz.x === newPos.x && haz.y === newPos.y)) {
+            return false;
         }
-        
+        return true;
     }
-    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left")) {
+    if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left") && isHazard("left")) {
         randMoves.push("left")
     }
-    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right")) {
+    if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right") && isHazard("right")) {
         randMoves.push("right");
     }
-    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down")) {
+    if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down") && isHazard("down")) {
         randMoves.push("down");
     }
-    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up")) {
+    if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up") && isHazard("up")) {
         randMoves.push("up");
+    }
+    if (randMoves.length==0) {
+        if (getSafe({x:head.x-1, y:head.y}, board) && headToHeadFilter.includes("left")) {
+            randMoves.push("left")
+        }
+        if (getSafe({x:head.x+1, y:head.y}, board) && headToHeadFilter.includes("right")) {
+            randMoves.push("right");
+        }
+        if (getSafe({x:head.x, y:head.y-1}, board) && headToHeadFilter.includes("down")) {
+            randMoves.push("down");
+        }
+        if (getSafe({x:head.x, y:head.y+1}, board) && headToHeadFilter.includes("up")) {
+            randMoves.push("up");
+        }
     }
     return randMoves;
 }
@@ -169,66 +187,20 @@ function chaseMethod(head, board, headToHeadFilter, longestSnakeHead) {
     const target = longestSnakeHead;
     return getDirection(target, head, board, headToHeadFilter);
 }
-function hazardMethod(head, board, headToHeadFilter) {
-    let moveDistances = [];
-
-    for (let i = 0; i < filter.length; i++) {
-        const direction = filter[i];
-        const startPos = nextMove(direction, head);
-        const distance = shortestDistanceToSafe(startPos, board);
-
-        if (distance !== null) {
-            moveDistances.push({ direction, distance });
-        }
-    }
-
-    if (moveDistances.length === 0) return [];
-
-    const minDistance = Math.min(...moveDistances.map(m => m.distance));
-    return moveDistances
-        .filter(m => m.distance === minDistance)
-        .map(m => m.direction);
-
-    function shortestDistanceToSafe(start, board) {
-        const visited = new Set();
-        const queue = [{ pos: start, dist: 0 }];
-        const key = (p) => `${p.x},${p.y}`;
-
-        while (queue.length > 0) {
-            const { pos, dist } = queue.shift();
-            const k = key(pos);
-
-            if (visited.has(k)) continue;
-            visited.add(k);
-
-            if (!getHazard(pos, board)) {
-                return dist;
-            }
-
-            const directions = [
-                { x: 0, y: -1 },
-                { x: 0, y: 1 },
-                { x: -1, y: 0 },
-                { x: 1, y: 0 }
-            ];
-
-            for (const dir of directions) {
-                const newPos = { x: pos.x + dir.x, y: pos.y + dir.y };
-                const nk = key(newPos);
-
-                if (!visited.has(nk) && getSafe(newPos, board)) {
-                    queue.push({ pos: newPos, dist: dist + 1 });
-                }
-            }
-        }
-
-        return null; // No safe tile found
-    }
-}
-
 function midMethod(head, board, headToHeadFilter) {
-    const target = {x:(board.width+1)/2, y:(board.height+1)/2}
-    return getDirection(target, head, board, headToHeadFilter);
+    let posArr = [];
+    for (const dir of headToHeadFilter) {
+        const pos = nextMove(dir, head);
+        if (!board.hazards.some(h => h.x === pos.x && h.y === pos.y)) {
+            posArr.push(dir)
+        }
+    }
+    if (posArr.length>0) {
+        return posArr;
+    } else {
+        const target = {x:(board.width+1)/2, y:(board.height+1)/2};
+        return getDirection(target, head, board, headToHeadFilter);
+    }
 }
 /*
     ***************************
