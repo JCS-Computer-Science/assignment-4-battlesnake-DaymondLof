@@ -114,7 +114,7 @@ function foodMethod(food, head, board, headToHeadFilter, you) {
             let closest = closestFood(snake.head); // Get the closest food for the opponent
     
             if (closest) {
-                let snakeDistance = getDistance(snake.head, closest);
+                let snakeDistance = getDistance(snake.head, closest)-1;
                 let youDistance = getDistance(you.head, closest); 
     
                 if (youDistance >= snakeDistance) {
@@ -344,34 +344,3 @@ function handleFill(filter, head, board) {
 function getDistance(snake, target) {
     return Math.abs(snake.x-target.x)+Math.abs(snake.y-target.y);
 }
-function isSafeDirection(direction, snake, board) {
-    const head = snake.head;
-    let next = { x: head.x, y: head.y };
-  
-    // Calculate the next coordinate based on the direction
-    switch (direction) {
-      case "up":
-        next.y -= 1;
-        break;
-      case "down":
-        next.y += 1;
-        break;
-      case "left":
-        next.x -= 1;
-        break;
-      case "right":
-        next.x += 1;
-        break;
-      default:
-        return false; // Invalid direction
-    }
-  
-    // Check if the next position is in a hazard
-    for (const hazard of board.hazards) {
-      if (hazard.x === next.x && hazard.y === next.y) {
-        return false;
-      }
-    }
-  
-    return true;
-  }
