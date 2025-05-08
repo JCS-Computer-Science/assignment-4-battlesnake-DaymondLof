@@ -45,6 +45,7 @@ export default function move(gameState){
 
     const enemyLongest = longestEnemySnake();
     const isLongest = !enemyLongest || you.length > enemyLongest.length+2;
+    const isLongestMoreAggressive = !enemyLongest || you.length > enemyLongest.length;
 
     let headToHeadFilter = ["up","down","left","right"];
     //avoid head to heads
@@ -52,7 +53,7 @@ export default function move(gameState){
     //flood fill
     headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
     
-    if (food.length > 0 && (!isLongest || you.health < 30) && moveOnTurn.length==0) {
+    if (food.length > 0 && (!isLongestMoreAggressive || you.health < 30) && moveOnTurn.length==0) {
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter, you);
         method = "Food";
     }
@@ -60,11 +61,11 @@ export default function move(gameState){
         moveOnTurn = midMethod(you.head, board, headToHeadFilter);
         method = "Huzz";
     }
-    if (isLongest) {
+    if (isLongest && gameState.game.map == "standard") {
         moveOnTurn = chaseMethod(you.head, board, headToHeadFilter, enemyLongest.head);
         method = "Hunt";
     }
-    if (moveOnTurn.length==0 && !isInHazard(you.body[you.body.length - 1])) {
+    if (moveOnTurn.length==0 && !isInHazard(you.body[you.body.length - 1]) && gameState.game.map!="snail_mode") {
         moveOnTurn = tailMethod(you.head, board, headToHeadFilter, you);
         method = "Tail";
     }
@@ -94,51 +95,55 @@ export default function move(gameState){
     *******************
 */
 function foodMethod(food, head, board, headToHeadFilter, you) {
-    const closestFood = (selectedHead) => {
-        if (!selectedHead) {
-            selectedHead = head;
-        }
-        if (food.length === 0) return undefined;
-    
-        let foodDis = food.map((element) => {
+    const closestFood = (foodList, selectedHead = head) => {
+        if (foodList.length === 0) return undefined;
+
+        let foodDis = foodList.map((element) => {
             return Math.abs(element.x - selectedHead.x) + Math.abs(element.y - selectedHead.y);
         });
-    
+
         let minIndex = foodDis.indexOf(Math.min(...foodDis));
         if (minIndex === -1) return undefined;
-    
-        return food[minIndex];
+
+        return foodList[minIndex];
     };
+
+    // 1. Filter out food closer to other snakes
+    let filteredFood = [...food];
     for (const snake of board.snakes) {
         if (snake.id !== you.id) {
-            let closest = closestFood(snake.head); // Get the closest food for the opponent
-    
+            let closest = closestFood(filteredFood, snake.head);
             if (closest) {
-                let snakeDistance = getDistance(snake.head, closest)-1;
-                let youDistance = getDistance(you.head, closest); 
-    
+                let snakeDistance = getDistance(snake.head, closest) - 1;
+                let youDistance = getDistance(you.head, closest);
+
                 if (youDistance >= snakeDistance) {
-                    // remove food if its closer to an opponent
-                    food = food.filter(pos => pos.x !== closest.x || pos.y !== closest.y);
+                    filteredFood = filteredFood.filter(pos => pos.x !== closest.x || pos.y !== closest.y);
                 }
             }
         }
     }
-    if (closestFood()) {
-        const distanceToFood = getDistance(you.head, closestFood());
-        const canSurviveHazard = distanceToFood <= Math.floor(you.health / 15);
-        if (canSurviveHazard) {
-            let target = closestFood();
-            return getDirection(target, head, board, headToHeadFilter);
-        }
-    }
+
+    // 2. Filter out hazards, keep both safe and full sets
     const hazards = board.hazards;
-    food = food.filter(food => !hazards.some(hazard => hazard.x === food.x && hazard.y === food.y));
-    if (food.length === 0) {
+    const safeFood = filteredFood.filter(food => !hazards.some(h => h.x === food.x && h.y === food.y));
+
+    // 3. If no safe food, fallback to hazard food if health permits
+    if (safeFood.length === 0) {
+        const fallback = closestFood(filteredFood);
+        if (fallback) {
+            const distanceToFood = getDistance(you.head, fallback);
+            const canSurviveHazard = distanceToFood <= Math.floor(you.health / 15);
+            if (canSurviveHazard) {
+                return getDirection(fallback, head, board, headToHeadFilter);
+            }
+        }
+        // 4. No food options
         return [];
     }
 
-    let target = closestFood();
+    // Use closest safe food
+    const target = closestFood(safeFood);
     return getDirection(target, head, board, headToHeadFilter);
 }
 
