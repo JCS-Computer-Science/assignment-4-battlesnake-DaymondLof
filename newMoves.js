@@ -7,15 +7,6 @@ const rand = max=>Math.floor(Math.random()*max);
 export default function move(gameState){
     const you = gameState.you
     const turn = gameState.turn;
-    const removeTail = (board)=>{
-        for (let i=0; i<board.snakes.length;i++) {
-            const snake = board.snakes[i];
-            if (snake.id==you.id) {
-                board.snakes[i].body.pop();
-            }
-        }
-        return board;
-    }
     const longestEnemySnake = () => {
         if (!board || !board.snakes || board.snakes.length === 0) {
             return you;
@@ -37,7 +28,7 @@ export default function move(gameState){
         const hazards = gameState.board.hazards;
         return hazards.some(hazard => hazard.x === target.x && hazard.y === target.y);
     };   
-    const board = removeTail(gameState.board);
+    const board = gameState.board
     const food = board.food;
     // const food = board.food.filter(pos => !(pos.x === (board.width-1)/2 && pos.y === (board.height-1)/2)); //removes middle food
     let moveOnTurn = [];
@@ -48,10 +39,10 @@ export default function move(gameState){
     const isLongestMoreAggressive = !enemyLongest || you.length > enemyLongest.length;
 
     let headToHeadFilter = ["up","down","left","right"];
-    //avoid head to heads
-    headToHeadFilter = checkHeadToHead(headToHeadFilter, you.head, board, you);
     //flood fill
     headToHeadFilter = handleFill(headToHeadFilter, you.head, board);
+    //avoid head to heads
+    headToHeadFilter = checkHeadToHead(headToHeadFilter, you.head, board, you);
     
     if (food.length > 0 && (!isLongestMoreAggressive || you.health < 30) && moveOnTurn.length==0) {
         moveOnTurn = foodMethod(food, you.head, board, headToHeadFilter, you);
@@ -229,19 +220,44 @@ function getDirection(pos, head, board, headToHeadFilter) { //get
     return arr;
 }
 function getSafe(pos, board) {
-    const {x, y} = pos;
-    if (x<0 || x>board.width-1 || y<0 || y>board.height-1) {
+    const { x, y } = pos;
+
+    if (x < 0 || x >= board.width || y < 0 || y >= board.height) {
         return false;
     }
-    for (let i=0;i<board.snakes.length;i++) {
+
+    for (let i = 0; i < board.snakes.length; i++) {
         const snake = board.snakes[i];
-        for (let j=0; j<snake.body.length; j++) {
+        const headX = snake.head.x;
+        const headY = snake.head.y;
+
+        // Check if the snake's head is adjacent to any food
+        const adjacentToHead = [
+            { x: headX, y: headY + 1 },
+            { x: headX, y: headY - 1 },
+            { x: headX + 1, y: headY },
+            { x: headX - 1, y: headY },
+        ];
+
+        for (const dir of adjacentToHead) {
+            if (board.food.some(f => f.x === dir.x && f.y === dir.y)) {
+                // If head is adjacent to food, the tail cannot be considered safe
+                const tail = snake.body[snake.body.length - 1];
+                if (pos.x === tail.x && pos.y === tail.y) {
+                    return false;
+                }
+            }
+        }
+
+        // Check if position overlaps any snake body part (excluding tails)
+        for (let j = 0; j < snake.body.length - 1; j++) {
             const part = snake.body[j];
-            if (part["x"]==x && part["y"]==y) {
+            if (part.x === x && part.y === y) {
                 return false;
             }
         }
     }
+
     return true;
 }
 function checkHeadToHead(moveOnTurn, head, board, you) {
